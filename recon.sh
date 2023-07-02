@@ -1,4 +1,8 @@
 #!/bin/bash
+#Auther: Mohir Mukhopadhyay
+#Version: 1.0
+
+
 # Function to perform DNS dump
 perform_dns_dump() {
     echo "[*]Performing DNS dump..."
@@ -73,9 +77,28 @@ perform_reverse_ip_lookup() {
 
 # Function to perform honeypot detection
 perform_honeypot_detection() {
-    echo "Performing honeypot detection for $domain..."
-    honeytrap -d $domain > honeypot_detection_output.txt
-    echo "Honeypot detection completed. Results saved to honeypot_detection_output.txt."
+    
+  echo "[*] Performing honeypots detection..."
+ping_count=5
+
+ping_result=$(ping -c $ping_count $domain)
+
+if [[ $? -ne 0 ]]; then
+    echo "Error: failed to ping target $domain"
+    exit 1
+fi
+
+echo "Ping results for target $domain:"
+echo "$ping_result"
+
+avg_response_time=$(echo "$ping_result" | awk '/^rtt/ {split($4, times, "/"); print times[2]}')
+max_ttl=$(echo "$ping_result" | awk '/^64 bytes from/ {print $6}' | sort -n | tail -n 1)
+
+if [[ $avg_response_time -gt 200 ]] && [[ $max_ttl -lt 128 ]]; then
+    echo "Potential honeypot detected" > honeypot_detection_output.txt
+else
+    echo "Target does not appear to be a honeypot" > honeypot_detection_output.txt
+fi 
 }
 
 # Function to perform endpoint detection
@@ -106,19 +129,26 @@ perform_ssl_tls_detection() {
     echo "SSL and TLS certificate detection completed. Results saved to ssl_tls_detection_output.txt."
 }
 
-# Function to take a screenshot of the webpage
-take_webpage_screenshot() {
-    echo "[*]Taking a screenshot of $domain..."
-    wkhtmltoimage --quiet --width 1280 --height 720 $domain > screenshot.png
-    echo "Screenshot captured. Saved as screenshot.png."
+# Perform web crawling
+web_crawling() {
+echo "Performing web crawling for $domain..."
+wget --spider --recursive --level=2 --no-verbose --no-check-certificate --output-file=crawl_output.txt $domain
+echo "Web crawling completed. Results saved to crawl_output.txt."
 }
-
 # Function to perform web template scanning
 perform_web_template_scan() {
     echo "[*]Performing web template scan for $domain..."
     wpscan --url $domain -o web_template_scan_output.txt
     echo "Web template scan completed. Results saved to web_template_scan_output.txt."
 }
+
+perform_source_code_dump() {
+    echo "[*] Dumping website data from $domain..."
+    curl -s "$domain" > "$output_file"
+    echo "Website data dumped. Results saved to $output_file."
+}
+}
+
 
 # Function to generate the HTML report
 generate_html_report() {
@@ -200,11 +230,15 @@ generate_html_report() {
   <h2>SSL and TLS Certificate Detection Results</h2>
   <pre>$(cat ssl_tls_detection_output.txt)</pre>
 
-  <h2>Screenshot</h2>
-  <img src="screenshot.png" alt="Webpage Screenshot">
+  <h2>Website crawling results</h2>
+  <pre>$(cat crawl_output.txt)</pre>
 
   <h2>Web Template Scan Results</h2>
   <pre>$(cat web_template_scan_output.txt)</pre>
+
+  <h2>Website source code dump results</h2>
+  <pre>$(<a href="source_code.html">Source code</a>)</pre>
+
 </body>
 </html>
 EOF
@@ -232,10 +266,11 @@ echo "12. Perform endpoint detection"
 echo "13. Perform CMS detection"
 echo "14. Perform firewall detection"
 echo "15. Perform SSL and TLS certificate detection"
-echo "16. Take a screenshot of the webpage"
+echo "16. Perform web crawling"
 echo "17. Perform web template scan"
-echo "18. Generate HTML report"
-echo "19. Perform all operations"
+echo "18. Perform source code dump"
+echo "19. Generate HTML report"
+echo "20. Perform all operations"
 echo "99. Quit"
 
 read -p "Enter your choice(s) (comma-separated): " choices
@@ -291,15 +326,20 @@ for choice in "${selected_choices[@]}"; do
             perform_ssl_tls_detection
             ;;
         16)
-            take_webpage_screenshot
+            web_crawling
             ;;
         17)
             perform_web_template_scan
             ;;
         18)
+            perform_source_code_dump
+            ;;
+
+
+        19)
             generate_html_report
             ;;
-        19)
+        20)
             perform_dns_dump 
             perform_dns_enum
             perform_port_scan
@@ -315,8 +355,9 @@ for choice in "${selected_choices[@]}"; do
             perform_cms_detection
             perform_firewall_detection
             perform_ssl_tls_detection
-            take_webpage_screenshot
+            web_crawling
             perform_web_template_scan
+            perform_source_code_dump
             generate_html_report
             ;;
         99)
